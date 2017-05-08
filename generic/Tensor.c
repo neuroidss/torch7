@@ -5,7 +5,7 @@
 #include "luaG.h"
 
 static void torch_Tensor_(c_readTensorStorageSizeStride)(lua_State *L, int index, int allowNone, int allowTensor, int allowStorage, int allowStride,
-                                                         THStorage **storage_, long *storageOffset_, THLongStorage **size_, THLongStorage **stride_);
+                                                         THStorage **storage_, ptrdiff_t *storageOffset_, THLongStorage **size_, THLongStorage **stride_);
 
 static void torch_Tensor_(c_readSizeStride)(lua_State *L, int index, int allowStride, THLongStorage **size_, THLongStorage **stride_);
 
@@ -29,7 +29,7 @@ static int torch_Tensor_(size)(lua_State *L)
 
 static int torch_Tensor_(elementSize)(lua_State *L)
 {
-  luaT_pushlong(L, THStorage_(elementSize)());
+  luaT_pushinteger(L, THStorage_(elementSize)());
   return 1;
 }
 
@@ -55,7 +55,7 @@ static int torch_Tensor_(stride)(lua_State *L)
 static int torch_Tensor_(nDimension)(lua_State *L)
 {
   THTensor *tensor = luaT_checkudata(L, 1, torch_Tensor);
-  luaT_pushlong(L, tensor->nDimension);
+  luaT_pushinteger(L, tensor->nDimension);
   return 1;
 }
 
@@ -76,21 +76,21 @@ static int torch_Tensor_(storage)(lua_State *L)
 static int torch_Tensor_(storageOffset)(lua_State *L)
 {
   THTensor *tensor = luaT_checkudata(L, 1, torch_Tensor);
-  luaT_pushlong(L, tensor->storageOffset+1);
+  luaT_pushinteger(L, tensor->storageOffset+1);
   return 1;
 }
 
 static int torch_Tensor_(new)(lua_State *L)
 {
   THTensor *tensor;
-  long storageOffset;
+  ptrdiff_t storageOffset;
   THLongStorage *size, *stride;
 
   if(lua_type(L, 1) == LUA_TTABLE)
   {
-    long i, j;
+    ptrdiff_t i, j;
     THLongStorage *counter;
-    long si = 0;
+    ptrdiff_t si = 0;
     int dimension = 0;
     int is_finished = 0;
 
@@ -142,7 +142,7 @@ static int torch_Tensor_(new)(lua_State *L)
           THTensor_(free)(tensor);
           THError("invalid element (not a number)");
         }
-        THStorage_(set)(THTensor_(storage)(tensor), si++, (real)lua_tonumber(L, -1));
+        THStorage_(set)(THTensor_(storage)(tensor), si++, LUA_NUMBER_TO_REAL(lua_tonumber(L, -1)));
         lua_pop(L, 1);
       }
 
@@ -214,7 +214,7 @@ static int torch_Tensor_(set)(lua_State *L)
 {
   THTensor *self = luaT_checkudata(L, 1, torch_Tensor);
   THStorage *storage;
-  long storageOffset;
+  ptrdiff_t storageOffset;
   THLongStorage *size, *stride;
 
   torch_Tensor_(c_readTensorStorageSizeStride)(L, 2, 1, 1, 1, 1,
@@ -384,6 +384,7 @@ static int torch_Tensor_(select)(lua_State *L)
   return 1;
 }
 
+#ifndef TH_REAL_IS_HALF
 static int torch_Tensor_(indexSelect)(lua_State *L)
 {
   int narg = lua_gettop(L);
@@ -567,6 +568,7 @@ static int torch_Tensor_(maskedFill)(lua_State *L)
 
   return 1;
 }
+#endif
 
 static int torch_Tensor_(transpose)(lua_State *L)
 {
@@ -651,7 +653,7 @@ static int torch_Tensor_(isSetTo)(lua_State *L)
 static int torch_Tensor_(nElement)(lua_State *L)
 {
   THTensor *tensor = luaT_checkudata(L, 1, torch_Tensor);
-  luaT_pushlong(L, THTensor_(nElement)(tensor));
+  luaT_pushinteger(L, THTensor_(nElement)(tensor));
   return 1;
 }
 
@@ -675,6 +677,8 @@ static int torch_Tensor_(copy)(lua_State *L)
     THTensor_(copyFloat)(tensor, src);
   else if( (src = luaT_toudata(L, 2, "torch.DoubleTensor")) )
     THTensor_(copyDouble)(tensor, src);
+  else if( (src = luaT_toudata(L, 2, "torch.HalfTensor")) )
+    THTensor_(copyHalf)(tensor, src);
   else
     luaL_typerror(L, 2, "torch.*Tensor");
   lua_settop(L, 1);
@@ -700,10 +704,14 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
         THArgCheck(index >= 0 && index < tensor->size[0], 2, "out of range");
         THStorage_(set)(tensor->storage, tensor->storageOffset+index*tensor->stride[0], value);
       } else {
+#ifndef TH_REAL_IS_HALF
         tensor = THTensor_(newWithTensor)(tensor);
         THTensor_(narrow)(tensor, NULL, 0, index, 1);
         THTensor_(fill)(tensor, value);
         THTensor_(free)(tensor);
+#else
+        THError("fill on torch.HalfTensor not yet supported");
+#endif
       }
     } else if( (src = luaT_toudata(L, 3, torch_Tensor)) ) {
       tensor = THTensor_(newWithTensor)(tensor);
@@ -745,6 +753,11 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
       THTensor_(narrow)(tensor, NULL, 0, index, 1);
       THTensor_(copyDouble)(tensor, src);
       THTensor_(free)(tensor);
+    } else if( (src = luaT_toudata(L, 3, "torch.HalfTensor")) ) {
+      tensor = THTensor_(newWithTensor)(tensor);
+      THTensor_(narrow)(tensor, NULL, 0, index, 1);
+      THTensor_(copyHalf)(tensor, src);
+      THTensor_(free)(tensor);
     } else {
       luaL_typerror(L, 3, "torch.*Tensor");
     }
@@ -752,7 +765,7 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
   }
   else if((idx = luaT_toudata(L, 2, "torch.LongStorage")))
   {
-    long index = THTensor_(storageOffset)(tensor);
+    ptrdiff_t index = THTensor_(storageOffset)(tensor);
     real value = luaG_(checkreal)(L,3);
     int dim;
 
@@ -829,7 +842,11 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
       /* doing a copy */
       void *src;
       if (lua_isnumber(L,3)) {
-        THTensor_(fill)(tensor, lua_tonumber(L,3));
+#ifndef TH_REAL_IS_HALF
+        THTensor_(fill)(tensor, LUA_NUMBER_TO_REAL(lua_tonumber(L,3)));
+#else
+        THError("fill on torch.HalfTensor not yet supported");
+#endif
       } else if( (src = luaT_toudata(L, 3, torch_Tensor)) ) {
         THTensor_(copy)(tensor, src);
       } else if( (src = luaT_toudata(L, 3, "torch.ByteTensor")) ) {
@@ -846,6 +863,8 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
         THTensor_(copyFloat)(tensor, src);
       } else if( (src = luaT_toudata(L, 3, "torch.DoubleTensor")) ) {
         THTensor_(copyDouble)(tensor, src);
+      } else if( (src = luaT_toudata(L, 3, "torch.HalfTensor")) ) {
+        THTensor_(copyHalf)(tensor, src);
       } else {
         luaL_typerror(L, 3, "torch.*Tensor");
       }
@@ -855,6 +874,7 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
   }
   else if((mask = luaT_toudata(L, 2, "torch.ByteTensor")))
   {
+#ifndef TH_REAL_IS_HALF
     THTensor *vals;
     if (lua_isnumber(L, 3))
     {
@@ -868,6 +888,9 @@ static int torch_Tensor_(__newindex__)(lua_State *L)
     {
       THError("number or " torch_Tensor " expected");
     }
+#else
+    THError("ByteTensor indexing not yet supported with half types");
+#endif
   }
   else
     lua_pushboolean(L, 0);
@@ -904,7 +927,7 @@ static int torch_Tensor_(__index__)(lua_State *L)
   }
   else if((idx = luaT_toudata(L, 2, "torch.LongStorage")))
   {
-    long index = THTensor_(storageOffset)(tensor);
+    ptrdiff_t index = THTensor_(storageOffset)(tensor);
     int dim;
 
     THArgCheck(idx->size == tensor->nDimension, 2, "invalid size");
@@ -916,7 +939,7 @@ static int torch_Tensor_(__index__)(lua_State *L)
       THArgCheck((z >= 0) && (z < tensor->size[dim]), 2, "index out of bound");
       index += z*tensor->stride[dim];
     }
-    luaG_(pushreal)(L, (double)THStorage_(get)(THTensor_(storage)(tensor), index));
+    luaG_(pushreal)(L, THStorage_(get)(THTensor_(storage)(tensor), index));
     lua_pushboolean(L, 1);
     return 2;
   }
@@ -987,11 +1010,16 @@ static int torch_Tensor_(__index__)(lua_State *L)
   }
   else if((mask = luaT_toudata(L, 2, "torch.ByteTensor")))
   {
+#ifndef TH_REAL_IS_HALF
     THTensor *vals = THTensor_(new)();
     THTensor_(maskedSelect)(vals, tensor, mask);
     luaT_pushudata(L, vals, torch_Tensor);
     lua_pushboolean(L, 1);
     return 2;
+#else
+    THError("ByteTensor based indexing not yetsupported with half type");
+    return 0;
+#endif
   }
   else
   {
@@ -1071,7 +1099,7 @@ static void torch_Tensor_(c_readSizeStride)(lua_State *L, int index, int allowSt
 }
 
 static void torch_Tensor_(c_readTensorStorageSizeStride)(lua_State *L, int index, int allowNone, int allowTensor, int allowStorage, int allowStride,
-                                                         THStorage **storage_, long *storageOffset_, THLongStorage **size_, THLongStorage **stride_)
+                                                         THStorage **storage_, ptrdiff_t *storageOffset_, THLongStorage **size_, THLongStorage **stride_)
 {
   THTensor *src = NULL;
   THStorage *storage = NULL;
@@ -1105,7 +1133,7 @@ static void torch_Tensor_(c_readTensorStorageSizeStride)(lua_State *L, int index
     }
     else
     {
-      *storageOffset_ = luaL_checklong(L, index+1)-1;
+      *storageOffset_ = luaL_checkinteger(L, index+1)-1;
       torch_Tensor_(c_readSizeStride)(L, index+2, allowStride, size_, stride_);
     }
     return;
@@ -1131,6 +1159,7 @@ static void torch_Tensor_(c_readTensorStorageSizeStride)(lua_State *L, int index
       THArgCheck(0, index, "expecting number");
 }
 
+#ifndef TH_REAL_IS_HALF
 static int torch_Tensor_(apply)(lua_State *L)
 {
   THTensor *tensor = luaT_checkudata(L, 1, torch_Tensor);
@@ -1143,7 +1172,7 @@ static int torch_Tensor_(apply)(lua_State *L)
                   lua_call(L, 1, 1);
                   if(lua_isnumber(L, 3))
                   {
-                    *tensor_data = (real)lua_tonumber(L, 3);
+                    *tensor_data = LUA_NUMBER_TO_REAL(lua_tonumber(L, 3));
                     lua_pop(L, 1);
                   }
                   else if(lua_isnil(L, 3))
@@ -1169,7 +1198,7 @@ static int torch_Tensor_(map)(lua_State *L)
                   lua_call(L, 2, 1);
                   if(lua_isnumber(L, 4))
                   {
-                    *tensor_data = (real)lua_tonumber(L, 4);
+                    *tensor_data = LUA_NUMBER_TO_REAL(lua_tonumber(L, 4));
                     lua_pop(L, 1);
                   }
                   else if(lua_isnil(L, 4))
@@ -1197,7 +1226,7 @@ static int torch_Tensor_(map2)(lua_State *L)
                   lua_call(L, 3, 1);
                   if(lua_isnumber(L, 5))
                   {
-                    *tensor_data = (real)lua_tonumber(L, 5);
+                    *tensor_data = LUA_NUMBER_TO_REAL(lua_tonumber(L, 5));
                     lua_pop(L, 1);
                   }
                   else if(lua_isnil(L, 5))
@@ -1208,6 +1237,7 @@ static int torch_Tensor_(map2)(lua_State *L)
   lua_settop(L, 1);
   return 1;
 }
+#endif
 
 static int torch_Tensor_(factory)(lua_State *L)
 {
@@ -1286,6 +1316,7 @@ static const struct luaL_Reg torch_Tensor_(_) [] = {
   {"narrow", torch_Tensor_(narrow)},
   {"sub", torch_Tensor_(sub)},
   {"select", torch_Tensor_(select)},
+#ifndef TH_REAL_IS_HALF
   {"index", torch_Tensor_(indexSelect)},
   {"indexCopy", torch_Tensor_(indexCopy)},
   {"indexAdd", torch_Tensor_(indexAdd)},
@@ -1293,6 +1324,7 @@ static const struct luaL_Reg torch_Tensor_(_) [] = {
   {"maskedSelect", torch_Tensor_(maskedSelect)},
   {"maskedCopy", torch_Tensor_(maskedCopy)},
   {"maskedFill", torch_Tensor_(maskedFill)},
+#endif
   {"transpose", torch_Tensor_(transpose)},
   {"t", torch_Tensor_(t)},
   {"unfold", torch_Tensor_(unfold)},
@@ -1302,9 +1334,11 @@ static const struct luaL_Reg torch_Tensor_(_) [] = {
   {"isSize", torch_Tensor_(isSize)},
   {"nElement", torch_Tensor_(nElement)},
   {"copy", torch_Tensor_(copy)},
+#ifndef TH_REAL_IS_HALF
   {"apply", torch_Tensor_(apply)},
   {"map", torch_Tensor_(map)},
   {"map2", torch_Tensor_(map2)},
+#endif
   {"read", torch_Tensor_(read)},
   {"write", torch_Tensor_(write)},
   {"__index__", torch_Tensor_(__index__)},
@@ -1318,6 +1352,9 @@ void torch_Tensor_(init)(lua_State *L)
                     torch_Tensor_(new), torch_Tensor_(free), torch_Tensor_(factory));
   luaT_setfuncs(L, torch_Tensor_(_), 0);
   lua_pop(L, 1);
+#ifndef TH_REAL_IS_HALF
+  THVector_(vectorDispatchInit)();
+#endif
 }
 
 #endif

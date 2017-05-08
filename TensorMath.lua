@@ -4,6 +4,9 @@ require 'torchcwrap'
 
 local interface = wrap.CInterface.new()
 local method = wrap.CInterface.new()
+local argtypes = wrap.CInterface.argtypes
+
+argtypes['ptrdiff_t'] = wrap.types.ptrdiff_t
 
 interface:print([[
 #include "TH.h"
@@ -164,6 +167,7 @@ local reals = {ByteTensor='unsigned char',
                IntTensor='int',
                LongTensor='long',
                FloatTensor='float',
+               HalfTensor='half',
                DoubleTensor='double'}
 
 local accreals = {ByteTensor='long',
@@ -172,11 +176,12 @@ local accreals = {ByteTensor='long',
                IntTensor='long',
                LongTensor='long',
                FloatTensor='double',
+               HalfTensor='float',
                DoubleTensor='double'}
 
 for _,Tensor in ipairs({"ByteTensor", "CharTensor",
                         "ShortTensor", "IntTensor", "LongTensor",
-                        "FloatTensor", "DoubleTensor"}) do
+                        "FloatTensor", "HalfTensor", "DoubleTensor"}) do
 
    local real = reals[Tensor]
    local accreal = accreals[Tensor]
@@ -205,6 +210,7 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
              end
    end
 
+   if Tensor ~= 'HalfTensor' then
    wrap("zero",
         cname("zero"),
         {{name=Tensor, returned=true}})
@@ -305,6 +311,18 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
          {name=Tensor, method={default=1}},
          {name=real}})
 
+   wrap("lshift",
+        cname("lshift"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=real}})
+
+   wrap("rshift",
+        cname("rshift"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=real}})
+
    wrap("fmod",
         cname("fmod"),
         {{name=Tensor, default=true, returned=true, method={default='nil'}},
@@ -313,6 +331,24 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
 
    wrap("remainder",
         cname("remainder"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=real}})
+
+   wrap("bitand",
+        cname("bitand"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=real}})
+
+   wrap("bitor",
+        cname("bitor"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=real}})
+
+   wrap("bitxor",
+        cname("bitxor"),
         {{name=Tensor, default=true, returned=true, method={default='nil'}},
          {name=Tensor, method={default=1}},
          {name=real}})
@@ -358,6 +394,18 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
          {name=Tensor, method={default=1}},
          {name=Tensor}})
 
+   wrap("clshift",
+        cname("clshift"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=Tensor}})
+
+   wrap("crshift",
+        cname("crshift"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=Tensor}})
+
    wrap("cfmod",
         cname("cfmod"),
         {{name=Tensor, default=true, returned=true, method={default='nil'}},
@@ -366,6 +414,24 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
 
    wrap("cremainder",
         cname("cremainder"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=Tensor}})
+
+   wrap("cbitand",
+        cname("cbitand"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=Tensor}})
+
+   wrap("cbitor",
+        cname("cbitor"),
+        {{name=Tensor, default=true, returned=true, method={default='nil'}},
+         {name=Tensor, method={default=1}},
+         {name=Tensor}})
+
+   wrap("cbitxor",
+        cname("cbitxor"),
         {{name=Tensor, default=true, returned=true, method={default='nil'}},
          {name=Tensor, method={default=1}},
          {name=Tensor}})
@@ -533,7 +599,7 @@ for _,Tensor in ipairs({"ByteTensor", "CharTensor",
    wrap("numel",
         cname("numel"),
         {{name=Tensor},
-         {name="long", creturned=true}})
+         {name="ptrdiff_t", creturned=true}})
 
    for _,name in ipairs({"cumsum", "cumprod"}) do
       wrap(name,
@@ -686,11 +752,11 @@ wrap("topk",
         {{name=Tensor, default=true, returned=true},
          {name=Tensor},
          {name=Tensor},
-         {name="index", default=lastdim(2)}},
+         {name="index", default=-1}},
         cname("catArray"),
         {{name=Tensor, default=true, returned=true},
          {name=Tensor .. "Array"},
-         {name="index", default=lastdimarray(2)}})
+         {name="index", default=-1}})
 
    if Tensor == 'ByteTensor' then -- we declare this only once
       interface:print(
@@ -978,6 +1044,7 @@ static void THTensor_random1__(THTensor *self, THGenerator *gen, long b)
         cname("nonzero"),
         {{name="IndexTensor", default=true, returned=true},
          {name=Tensor}})
+  end  -- ~= HalfTensor
 
    if Tensor == 'ByteTensor' then
      -- Logical accumulators only apply to ByteTensor
@@ -1031,6 +1098,14 @@ static void THTensor_random1__(THTensor *self, THGenerator *gen, long b)
       end
       wrap("histc",
            cname("histc"),
+           {{name=Tensor, default=true, returned=true},
+            {name=Tensor},
+            {name="long",default=100},
+            {name="double",default=0},
+            {name="double",default=0}})
+
+      wrap("bhistc",
+           cname("bhistc"),
            {{name=Tensor, default=true, returned=true},
             {name=Tensor},
             {name="long",default=100},

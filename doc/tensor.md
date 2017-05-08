@@ -554,7 +554,7 @@ false
 <a name="torch.Tensor.double"></a>
 <a name="torch.Tensor.float"></a>
 
-Convenience methods for the [type](#torch.type) method. For e.g.,
+Convenience methods for the [type](#torch.type) method. For example:
 ```lua
 x = torch.Tensor(3):fill(3.14)
 > x
@@ -1583,10 +1583,24 @@ Also note how an existing tensor `z` can be used to store the results.
 <a name="torch.Tensor.maskedCopy"></a>
 ### [Tensor] maskedCopy(mask, tensor) ###
 
-Copies the masked elements of `tensor` into itself. The masked elements are those elements having a
+Copies the elements of `tensor` into `mask` locations of itself. The masked elements are those elements having a
 corresponding `1` in the `mask` Tensor. This `mask` is a `torch.ByteTensor`
 of zeros and ones. The destination `Tensor` and the `mask` Tensor should have the same number of elements.
 The source `tensor` should have at least as many elements as the number of 1s in the `mask`.
+
+```lua
+x = torch.Tensor({0, 0, 0, 0})
+mask = torch.ByteTensor({0, 1, 0, 1})
+y = torch.Tensor({10, 20})
+x:maskedCopy(mask,y)
+print(x)
+
+  0
+ 10
+  0
+ 20
+[torch.DoubleTensor of size 4]
+```
 
 ```lua
 x = torch.range(1,4):double():resize(2,2)
@@ -1613,7 +1627,7 @@ y:maskedCopy(mask, x)
 [torch.DoubleTensor of dimension 2x4]
 ```
 
-Note how the dimensions of the above `x`, `mask` and `y' do not match,
+Note how the dimensions of the above `x`, `mask` and `y` do not match,
 but the number of elements do.
 
 <a name="torch.Tensor.maskedFill"></a>
@@ -1649,8 +1663,8 @@ but the number of elements do.
 Each of these methods returns a `LongTensor` corresponding to the indices of the
 given search operation.
 
-<a name="torch.Tensor.nonzero"/>
-### [LongTensor] nonzero(tensor)
+<a name="torch.Tensor.nonzero"></a>
+### [LongTensor] nonzero(tensor) ###
 
 Finds and returns a `LongTensor` corresponding to the *subscript* indices of all
 non-zero elements in `tensor`.
@@ -1727,7 +1741,7 @@ These methods returns a Tensor which is created by replications of the
 original tensor.
 
 <a name="torch.expand"></a>
-#### [result] expand([result,] sizes) ####
+### [result] expand([result,] sizes) ###
 
 `sizes` can either be a `torch.LongStorage` or numbers. Expanding a tensor
 does not allocate new memory, but only creates a new view on the existing tensor where
@@ -1821,12 +1835,12 @@ i=0; y:apply(function() i=i+1;return i end)
 ```
 
 <a name="torch.Tensor.expandAs"></a>
-#### [result] expandAs([result,] tensor) ####
+### [result] expandAs([result,] tensor) ###
 
 This is equivalent to `self:expand(tensor:size())`
 
 <a name="torch.repeatTensor"></a>
-#### [Tensor] repeatTensor([result,] sizes) ####
+### [Tensor] repeatTensor([result,] sizes) ###
 
 `sizes` can either be a `torch.LongStorage` or numbers. Repeating a tensor allocates
  new memory, unless `result` is provided, in which case its memory is
@@ -1865,7 +1879,7 @@ x = torch.rand(5)
  ```
 
 <a name="torch.squeeze"></a>
-#### [Tensor] squeeze([dim]) ####
+### [Tensor] squeeze([dim]) ###
 
 Removes all singleton dimensions of the tensor.
 If `dim` is given, squeezes only that particular dimension of the tensor.

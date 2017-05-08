@@ -50,11 +50,14 @@ ENDIF ("${SIZE_OF_VOIDP}" EQUAL 8)
 IF(CMAKE_COMPILER_IS_GNUCC)
   SET(mklthreads "mkl_gnu_thread" "mkl_intel_thread")
   SET(mklifaces  "gf" "intel")
-  SET(mklrtls)
+  SET(mklrtls "iomp5")
 ELSE(CMAKE_COMPILER_IS_GNUCC)
   SET(mklthreads "mkl_intel_thread")
   SET(mklifaces  "intel")
   SET(mklrtls "iomp5" "guide")
+  IF (MSVC)
+    SET(mklrtls "libiomp5md")
+  ENDIF (MSVC)
 ENDIF (CMAKE_COMPILER_IS_GNUCC)
 
 # Kernel libraries dynamically loaded
@@ -80,6 +83,10 @@ IF (INTEL_MKL_DIR)
     "${INTEL_MKL_DIR}/include")
   SET(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH}
     "${INTEL_MKL_DIR}/lib/${mklvers}")
+  IF (MSVC)
+    SET(CMAKE_LIBRARY_PATH ${CMAKE_LIBRARY_PATH}
+      "${INTEL_MKL_DIR}/lib/${iccvers}")
+  ENDIF (MSVC)
 ENDIF (INTEL_MKL_DIR)
 
 # Try linking multiple libs

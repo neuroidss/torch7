@@ -1,31 +1,17 @@
 #ifndef TH_GENERIC_FILE
-#error "You must define TH_GENERIC_FILE before including THGenerateAllTypes.h"
+#error "You must define TH_GENERIC_FILE before including THGenerateFloatTypes.h"
 #endif
 
-#define real float
-#define accreal double
-#define Real Float
-#define THInf FLT_MAX
-#define TH_REAL_IS_FLOAT
-#line 1 TH_GENERIC_FILE
-#include TH_GENERIC_FILE
-#undef accreal
-#undef real
-#undef Real
-#undef THInf
-#undef TH_REAL_IS_FLOAT
+#ifndef THGenerateManyTypes
+#define THFloatLocalGenerateManyTypes
+#define THGenerateManyTypes
+#endif
 
-#define real double
-#define accreal double
-#define Real Double
-#define THInf DBL_MAX
-#define TH_REAL_IS_DOUBLE
-#line 1 TH_GENERIC_FILE
-#include TH_GENERIC_FILE
-#undef accreal
-#undef real
-#undef Real
-#undef THInf
-#undef TH_REAL_IS_DOUBLE
+#include "THGenerateFloatType.h"
+#include "THGenerateDoubleType.h"
 
+#ifdef THFloatLocalGenerateManyTypes
+#undef THFloatLocalGenerateManyTypes
+#undef THGenerateManyTypes
 #undef TH_GENERIC_FILE
+#endif
